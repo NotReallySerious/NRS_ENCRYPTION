@@ -1,9 +1,15 @@
 import hashing, Convertbase64, salt, SHA256, XOR 
 from hashing import hash
-from Convertbase64 import ConvertBase64
+from Convertbase64 import Convert2Base64
 from salt import key
+import decryption
+from decryption import nrs_decrypt_files
 from SHA256 import convert2SHA256
-from XOR import the_actual_XOR, generate_key
+from XOR import the_actual_XOR, generate_key, the_actual_XOR_for_password
+import encrypt_file
+import encrypt_folder
+from encrypt_folder import nrs_encrypt_folder
+from encrypt_file import nrs_encrypt_files
 import string
 import colorama
 import pyfiglet
@@ -11,6 +17,7 @@ from colorama import Style,init,Fore
 import os
 import pathlib 
 from pathlib import Path
+import random
 
 def password_generate_policy(x):
     letters_uppercase = list(string.ascii_uppercase)
@@ -55,24 +62,19 @@ def password_generate_policy(x):
     print(f"{x} matches all criteria. Proceeding")
     return True
 
-def encrypt_text_file(filepath, password):
-    filepath = Path(filepath)   
-    
-    if filepath.exists() and filepath.is_file():
-        file_size = filepath.stat().st_size
-        key = generate_key(password)
-        key_to_bytes = key.encode('utf-8')
-    else:
-        return False
-    
-    with open(filepath, 'rb') as f:
-        data = bytearray(f.read())
+def nrs_password_encrypt(password):
 
-        for i in range(len(data)):
-            data[i] ^= key_to_bytes[i % len(key_to_bytes)]
-        
-        with open(filepath, 'wb') as w:
-            w.write(data)
+    print(Fore.WHITE + f"Initial Password: {password}")
+    first_round = hash(password)
+    print(Fore.GREEN + f"[1] First Round result: {first_round}")
+    second_round = the_actual_XOR_for_password(first_round)
+    print(Fore.RED + f"[2] Second Round result: {second_round}")
+    third_round = Convert2Base64(second_round)
+    print(Fore.CYAN + f"[3] Third Round result: {third_round}")
+    final_password = convert2SHA256(third_round)
+    print(Fore.YELLOW + f"[4] fourth Round result: {final_password}")
+    
+    return final_password
 
 def main():
     # Top banner
@@ -85,6 +87,63 @@ def main():
     print(Fore.CYAN + "Encrypt your secrets with totally random key")
     print(Fore.CYAN + '-' * 50)
 
+    while True:
+        print("1. Encrypting a folder")
+        print("2. Decrypting a folder")
+        print("3. Exit")
+        choice = int(input('Enter your choice: '))
+        if choice not in [1,2,3]:
+            print("please choose between 1, 2 and 3 only")
+        else:
+            match choice:
+                    case 1:
+                        while True:
+                            master_pass = input('Enter your Password: ').strip()
+                        
+                            if password_generate_policy(master_pass):
+                                encrypted_pass_seal = nrs_password_encrypt(master_pass)
+                                break
+                            else:
+                                print(Fore.RED + "Lineage check failed. Please try again.\n")                        
+                        
+                        folder_path = input('Enter the FULL path: ').strip()
+                        path_obj = Path(folder_path)
+
+                        if path_obj.exists() and path_obj.is_dir():
+
+                            key_file = path_obj / ".nrs_lock"
+                            with open(key_file, 'w') as f:
+                                f.write(encrypted_pass_seal)
+
+                            nrs_encrypt_folder(folder_path, master_pass)
+                            
+                            print(f"{Fore.GREEN}[✓] Vault Created Successfully.")
+                        else:
+                            print(Fore.RED + "Invalid folder path!")
+                    
+                    case 2:
+                        folder_path = input('Enter path to unlock: ').strip()
+                        path_obj = Path(folder_path)
+                        key_file = path_obj / ".nrs_lock"
+
+                        if not key_file.exists():
+                            print(Fore.RED + "[!] No lock file found.")
+                            continue
+
+                        attempt = input('Enter Master Password: ').strip()
+
+                        hashed_attempt = nrs_password_encrypt(attempt) 
+
+                        with open(key_file, 'r') as f:
+                            stored_seal = f.read().strip()
+
+                        if hashed_attempt == stored_seal:
+                            print(Fore.GREEN + "[✓] Access Granted.")
+                            nrs_decrypt_files(folder_path, attempt)
+
+                            key_file.unlink()
+                        else:
+                            print(Fore.RED + "[X] Incorrect Password.")
 
 
 

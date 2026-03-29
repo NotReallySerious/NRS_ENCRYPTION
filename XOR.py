@@ -1,30 +1,55 @@
 import random
 import string
+import pathlib 
+from random import randint
+from colorama import Fore, Style, init
 
 def generate_key(x):
-    len_key = len(x) * len(x)
+    pepper = "NRS_VAULT_VERSION_1.0.0"
+    random.seed(x + pepper)
+
+    len_key = len(x) * randint(10, 999999)
     chars = string.ascii_letters + string.digits + string.punctuation
     key = []
     for i in range(len_key):
-        c = random.choice(chars)
-        d = random.choice(chars)
-        e = random.choice(chars)
-        key.append(f"{c}{d}{e}")
+        key.append(f"{random.choice(chars)}{random.choice(chars)}{random.choice(chars)}")
     return ''.join(key)
 
-def the_actual_XOR(x):
-    input_to_hex = x.encode('utf-16').hex()
-    key_string = generate_key(input_to_hex)
+def the_actual_XOR_for_password(user_input):
+
+    if isinstance(user_input, str):
+        input_to_bytes = user_input.encode('utf-16-le')
+    else:
+        input_to_bytes = user_input
+
+    key_string = generate_key(user_input)
     key_to_bytes = key_string.encode('utf-8')
     
-    XORed = []
-    for i, char in enumerate(input_to_hex):   
+    XORed = bytearray()
+    for i, byte in enumerate(input_to_bytes):   
         key_byte = key_to_bytes[i % len(key_to_bytes)]
-        xor_result = ord(char) ^ key_byte     
+        xor_result = byte ^ key_byte     
         XORed.append(xor_result)
 
-    print(f"Original  : {x}")
-    print(f"Hex input : {input_to_hex}")
-    print(f"XORed     : {bytes(XORed).hex()}")
-    return XORed
+    return bytes(XORed)
 
+def the_actual_XOR(data, password_seed):
+    if isinstance(data, (str, pathlib.Path)):
+        with open(data, 'rb') as f:
+            file_data = f.read()
+        seed = str(data).encode().hex() 
+    else:
+        file_data = data
+        seed = password_seed 
+
+    random.seed(seed)
+    
+    key_string = generate_key(seed)
+    key_to_bytes = key_string.encode('utf-8')
+
+    final_data = bytearray()
+    for i, b in enumerate(file_data):
+        key_byte = key_to_bytes[i % len(key_to_bytes)] 
+        final_data.append(b ^ key_byte)
+    
+    return bytes(final_data)

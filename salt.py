@@ -3,7 +3,7 @@ import string
 
 def key(x):
     key_size = len(x)
-    # The key elements
+    # The key elements2
     chars = list(string.ascii_letters)
     numbers = list(string.digits)
     special_char = list(string.punctuation)
