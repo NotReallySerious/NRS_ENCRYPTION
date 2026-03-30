@@ -1,0 +1,7 @@
+colorama
+os
+pathlib
+string
+pyfiglet
+random
+string

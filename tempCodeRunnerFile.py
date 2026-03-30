@@ -1,1 +1,0 @@
-print(nrs_password_encrypt('test12'))

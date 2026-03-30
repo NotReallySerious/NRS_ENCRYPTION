@@ -81,6 +81,7 @@ def main():
     Banner_text = "N R S _ E N C R Y P T I O N"
     formatted = pyfiglet.figlet_format(Banner_text, font='larry3d', width=800)
     colored = Fore.LIGHTCYAN_EX + formatted
+    print(colored)
     print(Fore.CYAN + '-' * 50)
     print(Fore.CYAN + "Author: Mr Hoodie")
     print(Fore.CYAN + "Version: 1.0")
@@ -145,6 +146,10 @@ def main():
                         else:
                             print(Fore.RED + "[X] Incorrect Password.")
 
-
+                    case 3:
+                        break
+            
+if __name__ == '__main__':
+    main()
 
 
