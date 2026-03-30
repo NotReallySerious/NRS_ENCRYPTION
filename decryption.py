@@ -1,66 +1,89 @@
-import base64
-import json
 import os
+import json
 import platform
+import signal
+import sys
 from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from XOR import the_actual_XOR
 
+exiting = False
+
+def signal_handler(sig, frame):
+    global exiting
+    exiting = True
+
+def decrypt_worker(item, password, name_map):
+    try:
+        with open(item, "rb") as f:
+            combined_data = f.read()
+
+        separator = b"||"
+        sep_index = combined_data.find(separator)
+        if sep_index == -1:
+            return None
+
+        original_ext = combined_data[:sep_index].decode('utf-8')
+        xor_payload = combined_data[sep_index + len(separator):]
+
+        original_bytes = the_actual_XOR(xor_payload, password)
+
+        original_name = name_map.get(item.name)
+        if not original_name:
+            original_name = f"restored_{item.stem}{original_ext}"
+        
+        restored_path = item.parent / original_name
+
+        with open(restored_path, "wb") as f:
+            f.write(original_bytes)
+
+        item.unlink()
+        return original_name
+    except Exception:
+        return None
+
 def nrs_decrypt_files(path, password):
-    folder_path = Path(path)
+    global exiting
+    exiting = False
+    signal.signal(signal.SIGINT, signal_handler)
+
+    abs_path = os.path.abspath(path)
+    if platform.system() == "Windows" and not abs_path.startswith("\\\\?\\"):
+        abs_path = "\\\\?\\" + abs_path
+    
+    folder_path = Path(abs_path)
     manifest_file = folder_path / ".nrs_manifest"
     
     name_map = {}
     if manifest_file.exists():
         try:
-            with open(manifest_file, 'r') as f:
-                name_map = json.load(f)
-        except Exception as e:
-            print(f"[!] Warning: Could not read manifest. Using generic names. {e}")
+            with open(manifest_file, 'rb') as f:
+                encrypted_manifest = f.read()
+            decrypted_manifest_bytes = the_actual_XOR(encrypted_manifest, password)
+            name_map = json.loads(decrypted_manifest_bytes.decode('utf-8'))
+        except Exception:
+            pass
 
     encrypted_files = list(folder_path.rglob("*.nrs"))
     if not encrypted_files:
-        print("[!] No .nrs files found in this directory.")
         return
 
-    for item in encrypted_files:
-        try:
-            with open(item, "rb") as f:
-                raw_data = f.read()
-
-            separator = b"||"
-            sep_index = raw_data.find(separator)
-            if sep_index == -1:
-                print(f"[!] Skip: {item.name} has no NRS header.")
-                continue
-
-            original_ext = raw_data[:sep_index].decode('utf-8')
-            b64_content = raw_data[sep_index + len(separator):]
-
-            xor_ready_data = base64.b64decode(b64_content)
-
-            original_bytes = the_actual_XOR(xor_ready_data, password)
-
-            original_name = name_map.get(item.name, f"restored_{item.stem}{original_ext}")
-            restored_path = item.parent / original_name
-
-            with open(restored_path, "wb") as f:
-                f.write(original_bytes)
-
-            item.unlink()
-            print(f"[※] Restored: {original_name}")
-
-        except Exception as e:
-            print(f"[!] Critical Error on {item.name}: {e}")
-
-        if manifest_file.exists():
-            try:
-                with open(manifest_file, 'rb') as f:
-                    encrypted_data = f.read()
+    try:
+        with ThreadPoolExecutor(max_workers=os.cpu_count()) as executor:
+            futures = {executor.submit(decrypt_worker, f, password, name_map): f for f in encrypted_files}
             
-                decrypted_manifest_bytes = the_actual_XOR(encrypted_data, password)
-            
-                name_map = json.loads(decrypted_manifest_bytes.decode('utf-8'))
-            except Exception:
-                print("[!] Could not decrypt manifest. Wrong password or corrupted file.")
-    
-    print(f"\n[✓] NRS Vault Decryption Complete on {platform.system()}.")
+            for future in as_completed(futures):
+                if exiting:
+                    executor.shutdown(wait=True, cancel_futures=True)
+                    break
+                
+                result = future.result()
+                if result:
+                    print(f"[✓] Restored: {result}")
+
+    finally:
+        if not exiting and manifest_file.exists():
+            manifest_file.unlink()
+        
+        if exiting:
+            sys.exit(0)

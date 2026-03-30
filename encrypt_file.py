@@ -1,66 +1,88 @@
-import pathlib
-from pathlib import Path
-from XOR import the_actual_XOR
-from Convertbase64 import Convert2Base64
-from SHA256 import convert2SHA256
-from hashing import hash
-import json
 import os
-import platform 
+import json
+import platform
+import signal
+import sys
+from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from XOR import the_actual_XOR
+from hashing import hash
+from SHA256 import convert2SHA256
+
+exiting = False
+
+def signal_handler(sig, frame):
+    global exiting
+    exiting = True
+
+def encrypt_worker(item, password):
+    try:
+        original_name = item.name
+        original_suffix = item.suffix
+
+        xor_data = the_actual_XOR(item, password)
+        header = f"{original_suffix}||".encode('utf-8')
+        
+        with open(item, 'wb') as f:
+            f.write(header + xor_data)
+
+        stage1 = hash(item.stem)
+        stage3 = convert2SHA256(stage1)
+        final_name = f"{stage3[:15]}.nrs"
+        
+        new_path = item.parent / final_name
+        item.rename(new_path)
+        
+        return (final_name, original_name)
+    except Exception:
+        return None
 
 def nrs_encrypt_files(path, password):
-    file_path = Path(path)
-    files = list(file_path.rglob("*"))
+    global exiting
+    exiting = False
+    signal.signal(signal.SIGINT, signal_handler)
+
+    abs_path = os.path.abspath(path)
+    if platform.system() == "Windows" and not abs_path.startswith("\\\\?\\"):
+        abs_path = "\\\\?\\" + abs_path
+    
+    file_path = Path(abs_path)
+    all_items = list(file_path.rglob("*"))
+    files_to_process = [
+        f for f in all_items 
+        if f.is_file() and 
+        f.suffix not in ['.py', '.nrs'] and 
+        f.name not in ['.nrs_lock', '.nrs_manifest']
+    ]
     
     name_manifest = {}
-    manifest_file = file_path / ".nrs_manifest"
 
-    if not file_path.exists() or not file_path.is_dir():
-        print(f"Error: {file_path} is not a valid directory.")
-        return
-
-    for item in files:
-        if (item.is_file() and 
-            item.suffix not in ['.py', '.nrs'] and 
-            item.name not in ['.nrs_lock', '.nrs_manifest', '.DS_Store', 'desktop.ini']):
+    try:
+        with ThreadPoolExecutor(max_workers=os.cpu_count()) as executor:
+            futures = {executor.submit(encrypt_worker, f, password): f for f in files_to_process}
             
-            try:
-                original_full_name = item.name 
-                original_ext = item.suffix
-                original_stem = item.stem
-
-                xor_data = the_actual_XOR(item, password)
-                b64_content = Convert2Base64(xor_data)
+            for future in as_completed(futures):
+                if exiting:
+                    executor.shutdown(wait=True, cancel_futures=True)
+                    break
                 
-                header = f"{original_ext}||".encode('utf-8')
-                with open(item, 'wb') as f:
-                    f.write(header + b64_content)
+                res = future.result()
+                if res:
+                    new_nrs, old_real = res
+                    name_manifest[new_nrs] = old_real
 
-                stage1 = hash(original_stem)
-                stage2 = Convert2Base64(stage1.encode('utf-8')).decode('utf-8')
-                stage3 = convert2SHA256(stage2)
-                
-                final_name = f"{stage3[:15]}.nrs"
-                new_path = item.parent / final_name
-                
-                name_manifest[final_name] = original_full_name
-                item.rename(new_path)
-                print(f"[-] Secured: {final_name}")
+    finally:
+        if name_manifest:
+            manifest_path = file_path / ".nrs_manifest"
+            manifest_data = json.dumps(name_manifest).encode('utf-8')
+            encrypted_manifest = the_actual_XOR(manifest_data, password)
+            
+            with open(manifest_path, 'wb') as f:
+                f.write(encrypted_manifest)
+            
+            if platform.system() == "Windows":
+                import ctypes
+                ctypes.windll.kernel32.SetFileAttributesW(str(manifest_path), 2)
 
-            except Exception as e:
-                print(f"[!] Error on {item.name}: {e}")
-
-    if name_manifest:
-        manifest_json = json.dumps(name_manifest).encode('utf-8')
-        
-        encrypted_manifest = the_actual_XOR(manifest_json, password)
-        
-        with open(manifest_file, 'wb') as f:
-            f.write(encrypted_manifest)
-        
-        current_os = platform.system()
-        if current_os == "Windows":
-            import ctypes
-            ctypes.windll.kernel32.SetFileAttributesW(str(manifest_file), 2)
-
-    print(f"\nNRS Vault Operation Complete. Compatible with {platform.system()}.")
+        if exiting:
+            sys.exit(0)

@@ -3,7 +3,7 @@
 # NRS ENCRYPTION
 This project is about an encryption chain that utilizes the power of randomness and total obfuscation. This encryption tool can be used to encrypting any type of files and folders within the Windows, Linux, and MacOS. The files will be totally encrypted and obfuscated into a file type called `.nrs`. So even though unauthorized users can see the existence of the files, they wont be able to the content and what type of file is.
 
-# How does it works?
+# How does it work?
 First it asks the user for the folder path, and the master key a.k.a the password. It then scans the whole selected folder for files, and subfolders. It then encrypts the files and folder one by one using the encryption algorithm. 
 
 # Pre-requisites
