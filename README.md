@@ -1,4 +1,4 @@
-<img src='../NRS_ENCRYPTION.png' width=600px justify-content=center>
+<img src='https://github.com/NotReallySerious/NRS_ENCRYPTION/blob/main/NRS_ENCRYPTION.png'>
 
 # NRS ENCRYPTION
 This project is about an encryption chain that utilizes the power of randomness and total obfuscation. This encryption tool can be used to encrypting any type of files and folders within the Windows, Linux, and MacOS. The files will be totally encrypted and obfuscated into a file type called `.nrs`. So even though unauthorized users can see the existence of the files, they wont be able to the content and what type of file is.
