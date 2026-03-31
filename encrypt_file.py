@@ -5,6 +5,7 @@ import signal
 import sys
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from tqdm import tqdm
 from XOR import the_actual_XOR
 from hashing import hash
 from SHA256 import convert2SHA256
@@ -19,7 +20,6 @@ def encrypt_worker(item, password):
     try:
         original_name = item.name
         original_suffix = item.suffix
-
         xor_data = the_actual_XOR(item, password)
         header = f"{original_suffix}||".encode('utf-8')
         
@@ -55,7 +55,15 @@ def nrs_encrypt_files(path, password):
         f.name not in ['.nrs_lock', '.nrs_manifest']
     ]
     
+    total_files = len(files_to_process)
+    if total_files == 0:
+        print("No files found to encrypt.")
+        return
+
     name_manifest = {}
+
+    # Initialize the Progress Bar
+    pbar = tqdm(total=total_files, desc="Securing Vault", unit="file", bar_format='{l_bar}{bar:30}{r_bar}')
 
     try:
         with ThreadPoolExecutor(max_workers=os.cpu_count()) as executor:
@@ -66,12 +74,19 @@ def nrs_encrypt_files(path, password):
                     executor.shutdown(wait=True, cancel_futures=True)
                     break
                 
+                # Get the file object associated with this future to show in description
+                current_file = futures[future]
+                pbar.set_description(f"Encrypting: {current_file.name[:20]}...")
+                
                 res = future.result()
                 if res:
                     new_nrs, old_real = res
                     name_manifest[new_nrs] = old_real
+                
+                pbar.update(1) # Move the bar forward by 1
 
     finally:
+        pbar.close() # Ensure the bar finishes cleanly
         if name_manifest:
             manifest_path = file_path / ".nrs_manifest"
             manifest_data = json.dumps(name_manifest).encode('utf-8')

@@ -1,18 +1,17 @@
 import random
 import string
 
-def key(x):
-    key_size = len(x)
-    # The key elements2
-    chars = list(string.ascii_letters)
-    numbers = list(string.digits)
-    special_char = list(string.punctuation)
-    key = []
-    for _ in range(key_size):
-        c = random.choice(chars)
-        num = random.choice(numbers)
-        sc = random.choice(special_char)
-        key.append(f"{c}{num}{sc}")
-    
-    return key
+_CHARS   = string.ascii_letters
+_DIGITS  = string.digits
+_SPECIAL = string.punctuation
+_ALL     = _CHARS + _DIGITS + _SPECIAL
 
+
+def key(x: str) -> list:
+    rng      = random.Random()          
+    key_size = len(x)
+
+    return [
+        f"{rng.choice(_CHARS)}{rng.choice(_DIGITS)}{rng.choice(_SPECIAL)}"
+        for _ in range(key_size)
+    ]

@@ -1,55 +1,57 @@
-import random
-import string
-import pathlib 
-from random import randint
-from colorama import Fore, Style, init
+import hashlib
+import pathlib
+import numpy as np
 
-def generate_key(x):
-    pepper = "NRS_VAULT_VERSION_1.0.0"
-    random.seed(x + pepper)
+_PEPPER     = "NRS_VAULT_VERSION_1.0.0"
+_CHUNK_SIZE = 4 * 1024 * 1024          # 4 MB per chunk
 
-    len_key = len(x) * randint(10, 999999)
-    chars = string.ascii_letters + string.digits + string.punctuation
-    key = []
-    for i in range(len_key):
-        key.append(f"{random.choice(chars)}{random.choice(chars)}{random.choice(chars)}")
-    return ''.join(key)
+def _chunk_rng(seed_str: str, chunk_index: int) -> np.random.Generator:
+    raw    = f"{seed_str}{_PEPPER}{chunk_index}".encode("utf-8")
+    digest = hashlib.sha256(raw).digest()
+    return np.random.default_rng(int.from_bytes(digest[:8], "big"))
 
-def the_actual_XOR_for_password(user_input):
 
-    if isinstance(user_input, str):
-        input_to_bytes = user_input.encode('utf-16-le')
-    else:
-        input_to_bytes = user_input
+def _xor_bytes(data: bytes, seed_str: str) -> bytes:
 
-    key_string = generate_key(user_input)
-    key_to_bytes = key_string.encode('utf-8')
-    
-    XORed = bytearray()
-    for i, byte in enumerate(input_to_bytes):   
-        key_byte = key_to_bytes[i % len(key_to_bytes)]
-        xor_result = byte ^ key_byte     
-        XORed.append(xor_result)
+    out         = bytearray()
+    chunk_index = 0
 
-    return bytes(XORed)
+    for offset in range(0, len(data), _CHUNK_SIZE):
+        chunk    = data[offset : offset + _CHUNK_SIZE]
+        key      = _chunk_rng(seed_str, chunk_index).integers(
+                    0, 256, size=len(chunk), dtype=np.uint8)
+        data_arr = np.frombuffer(chunk, dtype=np.uint8)
+        out.extend((data_arr ^ key).tobytes())
+        chunk_index += 1
 
-def the_actual_XOR(data, password_seed):
+    return bytes(out)
+
+def the_actual_XOR(data, password: str) -> bytes:
     if isinstance(data, (str, pathlib.Path)):
-        with open(data, 'rb') as f:
-            file_data = f.read()
-        seed = str(data).encode().hex() 
+        p = pathlib.Path(data)
+        with open(p, "rb") as fh:
+            raw = fh.read()
+        seed = password + p.stem          # per-file uniqueness
     else:
-        file_data = data
-        seed = password_seed 
+        raw  = bytes(data)
+        seed = password                   # blob / manifest
 
-    random.seed(seed)
-    
-    key_string = generate_key(seed)
-    key_to_bytes = key_string.encode('utf-8')
+    return _xor_bytes(raw, seed)
 
-    final_data = bytearray()
-    for i, b in enumerate(file_data):
-        key_byte = key_to_bytes[i % len(key_to_bytes)] 
-        final_data.append(b ^ key_byte)
-    
-    return bytes(final_data)
+
+def the_actual_XOR_for_password(user_input) -> bytes:
+    if isinstance(user_input, str):
+        raw  = user_input.encode("utf-16-le")
+        seed = user_input
+    else:
+        raw  = bytes(user_input)
+        seed = user_input.decode("utf-8", errors="replace")
+
+    return _xor_bytes(raw, seed)
+
+
+def generate_key(seed_str: str) -> str:
+    import random, string as _s
+    random.seed(seed_str + _PEPPER)
+    n = len(seed_str) * random.randint(10, 9999)
+    return "".join(random.choices(_s.ascii_letters + _s.digits + _s.punctuation, k=n))

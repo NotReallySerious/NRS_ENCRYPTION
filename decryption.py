@@ -5,6 +5,7 @@ import signal
 import sys
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from tqdm import tqdm
 from XOR import the_actual_XOR
 
 exiting = False
@@ -65,8 +66,14 @@ def nrs_decrypt_files(path, password):
             pass
 
     encrypted_files = list(folder_path.rglob("*.nrs"))
-    if not encrypted_files:
+    total_files = len(encrypted_files)
+    
+    if total_files == 0:
+        print("[!] No .nrs files found to decrypt.")
         return
+
+    # Initialize the Progress Bar
+    pbar = tqdm(total=total_files, desc="Unlocking Vault", unit="file", bar_format='{l_bar}{bar:30}{r_bar}')
 
     try:
         with ThreadPoolExecutor(max_workers=os.cpu_count()) as executor:
@@ -77,13 +84,20 @@ def nrs_decrypt_files(path, password):
                     executor.shutdown(wait=True, cancel_futures=True)
                     break
                 
+                # Update description with current filename
+                current_file = futures[future]
+                pbar.set_description(f"Restoring: {current_file.name[:20]}...")
+                
                 result = future.result()
-                if result:
-                    print(f"[✓] Restored: {result}")
+                pbar.update(1)
 
     finally:
+        pbar.close()
         if not exiting and manifest_file.exists():
             manifest_file.unlink()
         
         if exiting:
+            print("\n[!] Decryption interrupted. Progress saved.")
             sys.exit(0)
+
+    print(f"\n[✓] NRS Vault Decryption Complete.")

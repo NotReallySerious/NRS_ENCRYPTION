@@ -1,13 +1,12 @@
 import hashlib
-import string
-import Convertbase64
 
-def convert2SHA256(x):
-    if isinstance(x, bytes):
-        data_to_hash = x
+def convert2SHA256(x) -> str:
+    if isinstance(x, (bytes, bytearray)):
+        data = bytes(x)
     else:
-        data_to_hash = x.encode('utf-16')
+        data = str(x).encode('utf-8')   
 
-    hash_object = hashlib.sha256(data_to_hash)
-    return hash_object.hexdigest()
-
+    try:
+        return hashlib.sha256(data, usedforsecurity=False).hexdigest()
+    except TypeError:
+        return hashlib.sha256(data).hexdigest()
