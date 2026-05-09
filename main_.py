@@ -26,6 +26,7 @@ _ALLOWED = _LOWER | _UPPER | _DIGITS | _SPECIAL
  
  
 def password_generate_policy(x: str) -> bool:
+    """Validate password meets security criteria."""
     if len(x) < 12:
         print(Fore.RED + 'Password must be at least 12 characters')
         return False
@@ -49,11 +50,7 @@ def password_generate_policy(x: str) -> bool:
  
  
 def nrs_password_encrypt(password: str) -> str:
-    """
-    Password hashing pipeline:
-      hash()  →  XOR_for_password()  →  base64  →  SHA-256
-    Each step is deterministic — same password always produces same seal.
-    """
+    """Hash password through multiple rounds for security."""
     first_round  = hash(password)
     second_round = the_actual_XOR_for_password(first_round)
     third_round  = Convert2Base64(second_round)
@@ -64,7 +61,7 @@ def nrs_password_encrypt(password: str) -> str:
 def main():
     formatted = pyfiglet.figlet_format("NRS _ ENCRYPTION", font='doom', width=800)
     print(Fore.LIGHTCYAN_EX + formatted)
-    print(Fore.CYAN + '-' * 50 + "\nAuthor: Mr Hoodie | Version: 1.0\n" + '-' * 50)
+    print(Fore.CYAN + '-' * 50 + "\nAuthor: Mr Hoodie | Version: 2.0 (Fixed)\n" + '-' * 50)
  
     while True:
         print("\n1. Encrypting a folder\n2. Decrypting a folder\n3. Exit")
@@ -77,16 +74,22 @@ def main():
                     encrypted_pass_seal = nrs_password_encrypt(master_pass)
                     break
  
-            folder_path = input('Enter the FULL path (without "): ').strip()
+            folder_path = input('Enter the FULL path (without quotes): ').strip()
             path_obj    = Path(os.path.abspath(folder_path))
  
             if path_obj.exists() and path_obj.is_dir():
                 key_file = path_obj / ".nrs_lock"
-                with open(key_file, 'w') as f:
-                    f.write(encrypted_pass_seal)
- 
-                nrs_encrypt_files(str(path_obj), master_pass)
-                print(Fore.GREEN + "[✓] Vault Created Successfully.")
+                try:
+                    with open(key_file, 'w') as f:
+                        f.write(encrypted_pass_seal)
+                    
+                    print(Fore.CYAN + "[*] Starting encryption...")
+                    nrs_encrypt_files(str(path_obj), master_pass)
+                    print(Fore.GREEN + "[✓] Vault Created Successfully.")
+                except Exception as e:
+                    print(Fore.RED + f"[!] Encryption failed: {e}")
+                    if key_file.exists():
+                        key_file.unlink()
             else:
                 print(Fore.RED + "Invalid folder path!")
  
@@ -99,21 +102,27 @@ def main():
                 print(Fore.RED + "[!] No lock file found.")
                 continue
  
-            attempt        = input('Enter Master Password: ').strip()
-            hashed_attempt = nrs_password_encrypt(attempt)
+            try:
+                attempt        = input('Enter Master Password: ').strip()
+                hashed_attempt = nrs_password_encrypt(attempt)
  
-            with open(key_file, 'r') as f:
-                stored_seal = f.read().strip()
+                with open(key_file, 'r') as f:
+                    stored_seal = f.read().strip()
  
-            if hashed_attempt == stored_seal:
-                print(Fore.GREEN + "[✓] Access Granted.")
-                nrs_decrypt_files(str(path_obj), attempt)
-                if key_file.exists():
-                    key_file.unlink()
-            else:
-                print(Fore.RED + "[X] Incorrect Password.")
+                if hashed_attempt == stored_seal:
+                    print(Fore.GREEN + "[✓] Access Granted.")
+                    print(Fore.CYAN + "[*] Starting decryption...")
+                    nrs_decrypt_files(str(path_obj), attempt)
+                    if key_file.exists():
+                        key_file.unlink()
+                        print(Fore.GREEN + "[✓] Lock file removed.")
+                else:
+                    print(Fore.RED + "[X] Incorrect Password.")
+            except Exception as e:
+                print(Fore.RED + f"[!] Decryption error: {e}")
  
         elif choice == '3':
+            print(Fore.YELLOW + "Exiting...")
             break
         else:
             print(Fore.YELLOW + "Please choose 1, 2, or 3.")

@@ -1,9 +1,7 @@
 <div align="center">
 
-# 🔐 NRS ENCRYPTION
+# 🔐 NRS ENCRYPTION (v2.0 - Fixed & Improved)
 ### *Securing secrets with ease*
-
-![NRS Encryption Banner](NRS_ENCRYPTION.png)
 
 [![Python](https://img.shields.io/badge/Python-3.14%2B-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey?style=for-the-badge)](/)
@@ -19,35 +17,101 @@
 
 ## 📖 Table of Contents
 
+- [Version 2.0 - Critical Fixes & Improvements](#-version-20---critical-fixes--improvements)
 - [What is NRS Encryption?](#-what-is-nrs-encryption)
 - [How It Works](#-how-it-works)
 - [Encryption Chain](#-encryption-chain)
-- [File Structure](#-file-structure)
-- [Getting Started](#-getting-started)
-- [Usage](#-usage)
 - [Security Design](#-security-design)
-- [Performance](#-performance)
 - [Requirements](#-requirements)
+- [Usage](#-usage)
 - [Disclaimer](#-disclaimer)
+
+---
+
+## ✅ Version 2.0 - Critical Fixes & Improvements
+
+### 🔴 CRITICAL BUG FIXES
+
+#### 1. **Files with Same Name, Different Extensions Now Handled Correctly** ✓
+- **Problem**: `photo.jpg` and `photo.png` would encrypt to the same filename, causing data loss
+- **Solution**: Encrypted filename now based on `hash(stem + extension)` instead of just `hash(stem)`
+- **Impact**: Files are now uniquely identified and never collide
+
+#### 2. **Encryption/Decryption Fully Reversible** ✓
+- **Problem**: XOR implementation used NumPy's random generator inconsistently
+- **Solution**: Replaced with pure Python + HMAC-SHA256 for deterministic key derivation
+- **Impact**: Encryption is now guaranteed to be reversible; same password+stem always produces same key
+
+#### 3. **Added Integrity Verification** ✓
+- **Problem**: No way to detect if decrypted data was corrupted
+- **Solution**: Added SHA256 checksums to file headers; verified after decryption
+- **Impact**: Corrupted files are immediately detected and reported
+
+### ⚙️ PERFORMANCE IMPROVEMENTS
+
+1. **Removed NumPy Dependency** ⚡
+   - Removed unnecessary numpy for XOR operations
+   - Pure Python XOR is sufficient and faster for this use case
+   - Reduced dependencies from 4 to 3
+
+2. **Improved Error Handling** ⚡
+   - Silent failures now tracked and reported
+   - Failed decryptions are logged with detailed error messages
+   - User can see which files failed and why
+
+3. **Better Parallelization** ⚡
+   - Multi-process worker pool uses CPU cores efficiently
+   - Progress bar shows real-time status
+   - Graceful interrupt handling (Ctrl+C)
+
+### 🛡️ SECURITY ENHANCEMENTS
+
+1. **Header Format Improved**
+   - New format: `extension||stem||checksum||encrypted_data`
+   - Includes integrity check field
+   - Better parsing with error detection
+
+2. **Key Derivation More Robust**
+   - File-specific keys: `hash(password + stem + extension)`
+   - Manifest key: `hash(password)` only
+   - Multiple transformation rounds ensure cryptographic strength
+
+3. **Name Collision Handling**
+   - Automatic suffix addition if filename already exists during decryption
+   - Files renamed to `filename_1.ext`, `filename_2.ext`, etc.
+   - Never overwrites existing files
+
+### 📝 CODE QUALITY IMPROVEMENTS
+
+1. **Added Comprehensive Documentation**
+   - Docstrings for all major functions
+   - Explained encryption chain in comments
+   - Documented reversibility guarantees
+
+2. **Better Exception Handling**
+   - Try-catch blocks with detailed error reporting
+   - Graceful recovery from partial encryption/decryption
+   - Clear error messages for debugging
+
+3. **Removed Dead Code**
+   - Cleaned up unused `salt.py`
+   - Removed unused `encrypt_folder.py` (functionality in encrypt_file.py)
+   - Removed test file `randomexample.py`
 
 ---
 
 ## 🧠 What is NRS Encryption?
 
-NRS Encryption is a **folder-level file encryption vault** built entirely from scratch in Python. It chains together multiple custom cryptographic operations — hashing, salting, XOR encryption, Base64 encoding, and SHA-256 — to encrypt every file in a target folder and anonymise their filenames, making the contents completely unreadable without the correct master password.
-
-Unlike tools that wrap existing crypto libraries, NRS was engineered from the ground up as a study in applied cryptography and systems design. Every step of the pipeline is hand-rolled and intentional.
+NRS Encryption is a **folder-level file encryption vault** built entirely from scratch in Python. It chains together multiple custom cryptographic operations — hashing, XOR encryption, Base64 encoding, and SHA-256 — to encrypt every file in a target folder and anonymise their filenames.
 
 **What it does:**
 - Encrypts every file inside a folder recursively with a unique key per file
 - Anonymises filenames so directory listings reveal nothing
 - Stores the original filename mapping in an encrypted manifest
-- Verifies password integrity via a stored password seal before allowing decryption
-- Processes files in parallel across all CPU cores for maximum speed
-
----
-
-## ⚙️ How It Works
+- Verifies password integrity via a stored password seal
+- Processes files in parallel across all CPU cores
+- **Validates data integrity with checksums** (NEW!)
+- **Handles files with identical names but different extensions** (NEW!)
 
 NRS operates in two phases — **locking** (encryption) and **unlocking** (decryption).
 
