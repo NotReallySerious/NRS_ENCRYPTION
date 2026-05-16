@@ -368,7 +368,7 @@ NRS Encryption is a **personal project** built for educational purposes and as a
 
 <div align="center">
 
-Built with 🔒 by **Mr Hoodie** &nbsp;|&nbsp; Version 1.0
+Built with 🔒 by **Mr Hoodie** &nbsp;|&nbsp; Version 2.0
 
 *"Security is not a product, but a process."*
 
